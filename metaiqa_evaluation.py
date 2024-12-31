@@ -8,18 +8,43 @@ import pandas as pd
 class MetaIQAFeatureExtractor(nn.Module):
     def __init__(self, input_size=3*512*512, hidden_size=1024, output_size=512):
         super(MetaIQAFeatureExtractor, self).__init__()
-        self.model = nn.Sequential(
-        nn.Linear(input_size, hidden_size),
-        nn.LeakyReLU(),  
-        nn.Dropout(0.3),
-        nn.Linear(hidden_size, output_size),
-        nn.LeakyReLU(),
-        nn.Linear(output_size, 1)
-        )
+        self.input_size = input_size
+
+        # First layer
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.relu1 = nn.LeakyReLU()
+        self.dropout1 = nn.Dropout(0.1)
+
+        # Second layer with residual connection
+        self.fc2 = nn.Linear(hidden_size, output_size)
+        self.residual_connection = nn.Linear(hidden_size, output_size)  # 調整用
+        self.relu2 = nn.LeakyReLU()
+        self.dropout2 = nn.Dropout(0.1)
+
+        # Output layer
+        self.fc3 = nn.Linear(output_size, 1)
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        x = x.view(x.size(0), -1)  
-        return self.model(x)
+        x = x.view(x.size(0), -1)  # Flatten input if necessary
+        
+        # First layer
+        out = self.fc1(x)
+        out = self.relu1(out)
+        out = self.dropout1(out)
+
+        # Second layer with residual connection
+        residual = self.residual_connection(out)  # サイズを一致させる
+        out = self.fc2(out)
+        out = self.relu2(out)
+        out = self.dropout2(out)
+        out += residual  # Add residual connection
+
+        # Output layer
+        out = self.fc3(out)
+        out = self.sigmoid(out)
+        return out
+
 
 # ディレクトリ内の画像ファイルを取得する関数
 def get_image_files(directory):
@@ -53,7 +78,7 @@ def evaluate_images_and_save_csv(model, image_files, root_dir, output_dir, devic
             predicted_score = model(image).item()  # 推定スコア
 
             # 結果をリストに追加
-            results.append({"image_name": img_name, "predicted_score": predicted_score})
+            results.append({"Filename": img_name, "metaiqa": predicted_score})
             print(f"[{idx + 1}/{total_images}] Image: {img_name}, Predicted Score: {predicted_score}")
 
     # 結果をCSVに保存
@@ -63,8 +88,8 @@ def evaluate_images_and_save_csv(model, image_files, root_dir, output_dir, devic
 
 if __name__ == "__main__":
     # 評価対象の画像ディレクトリ
-    image_directory = "./generate_image/stable-diffusion-xl-base-1.0/"
-    output_directory = "./output_csv/"  # 出力ディレクトリを指定
+    image_directory = "../IQA-PyTorch/datasets/koniq10k/1024x768"
+    output_directory = "./csv/"  # 出力ディレクトリを指定
 
     # 出力ディレクトリが存在しない場合は作成
     if not os.path.exists(output_directory):
